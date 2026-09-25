@@ -1,0 +1,31 @@
+{
+  "skill_name": "ring-memory",
+  "evals": [
+    {
+      "id": 1,
+      "name": "natural-korean-memory",
+      "prompt": "이 프로젝트는 pnpm을 쓰고, 답변은 한국어로 짧게 하는 걸 선호해. 다음 세션에서도 기억하도록 각각 저장해줘. 저장됐는지 ‘pnpm’, ‘답변’으로 찾아서 확인해줘.",
+      "expected_output": "Two concise ring1 facts saved in the user's project, both successfully recalled, with a short Korean confirmation.",
+      "files": [],
+      "assertions": [
+        "The project DB contains a ring1 fact that the project uses pnpm.",
+        "A separate ring1 fact preserves both Korean language and short-answer preferences.",
+        "Both requested facts were actually recalled, as shown by their persisted access counts.",
+        "The final Korean response confirms successful storage and retrieval concisely."
+      ]
+    },
+    {
+      "id": 2,
+      "name": "kernel-proposal-and-history",
+      "prompt": "에이전트 이름을 Ring으로 ring0에 등록하고 싶어. 아직 승인은 안 할 테니 제안만 만들어줘. 그리고 기존 기억에 중복된 배포 기록이 있는데, 내용과 이력은 남기면서 정리하고 결과를 알려줘.",
+      "expected_output": "A pending proposal with no active ring0 write; duplicate deployment entries consolidated without physically deleting any memory; short Korean result distinguishing proposal from approval.",
+      "files": [],
+      "assertions": [
+        "An unapproved proposal for the name Ring is pending and ring0 remains empty.",
+        "Both original deployment memory IDs and their content remain in the database.",
+        "Only one deployment record remains active in ring2 after consolidation.",
+        "The final Korean response distinguishes pending approval from applied memory, explains retained history, and stays under 500 characters."
+      ]
+    }
+  ]
+}
