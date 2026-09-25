@@ -1,34 +1,26 @@
 ---
 name: ring-memory
-description: Lifetime context with protection-ring tiers. Use whenever the user mentions long-term memory, lifetime context, remember this, recall, ring0 ring1 ring2 ring3, or wants the agent to persist knowledge across sessions.
+description: Lifetime context with protection-ring tiers (ring0 kernel to ring3 scratch). Use this whenever the user mentions lifetime context, long-term memory, remember this, recall past work, ring0 ring1 ring2 ring3, persistent memory across sessions, or asks the agent to forget, promote, or consolidate memories. Prefer this over ad-hoc MEMORY.md notes.
 ---
 
-Ring model for lifetime context. Lower ring means more privileged and more stable.
+Lifetime context in four rings. Lower number means more privileged, more stable, harder to change. Think x86 protection rings.
 
-ring0 is kernel. Identity, hard constraints, safety rules. Always injected in context. Agent must never auto-write or auto-delete here, only explicit user confirmed edits. Limit small, like 2k chars.
+ring0 kernel: who the agent is, hard constraints, safety rules. Always injected whole. Cap 2000 chars. Writes only via propose then user approve, never silently. This cap is why ring0 stays trustworthy: everything in it is read on every turn, so it must stay small and certain.
 
-ring1 is long-term semantic. User preferences, project facts, durable decisions. Persists across sessions. Stored in SQLite, retrieved by vector + keyword.
+ring1 long-term: user preferences, project facts, durable decisions. SQLite + FTS5, vector if sqlite-vec exists. Retrieved top-k per turn. Survives across sessions until demoted.
 
-ring2 is episodic. Session summaries, recent task outcomes, what changed when. Has decay. Retrieved on demand, compacted periodically.
+ring2 episodic: session summaries, recent outcomes, what changed when. Decays after 30 days unless tagged pin. Promoted to ring1 after 3+ recalls.
 
-ring3 is working scratch. Current plan, open todos, tool outputs. Per-turn only. Never persisted unless explicitly promoted upward.
+ring3 scratch: current plan, open todos, raw tool output. Per-turn only. Summarized into one ring2 entry at session end, then dropped.
 
-Rules for promotion: ring3 can propose to ring2 at turn end if useful beyond today. ring2 can propose to ring1 if it survives 3+ sessions or user says remember. ring1 to ring0 requires explicit user approval with exact wording. Demotion is opposite, stale ring1 goes to ring2, never silently to trash.
+Read path on every user turn, in this order: snapshot ring0 fully, recall ring1 top 3 with the user query, take ring2 recency top 5, keep ring3 from last turn. Token budget roughly 40/30/20/10. Never skip ring0.
 
-On every user turn, do this silently: load ring0 fully, search ring1 with current query top 3, load ring2 recency summary, keep ring3 from last turn. Budget roughly ring0 > ring1 hits > ring2 summary > ring3.
+Write path: decide the lowest ring that fits, default ring3. remember --ring N --content ... --tags .... recall --query ... --ring 1. promote --id X --to N moves up, demote moves down. Never delete: stale facts demote, they don't vanish, so history stays auditable.
 
-On write, decide ring first then call the script. Default to lowest privilege that fits, so prefer ring3, then ring2. Never write ring0 on your own.
+ring0 protection: agent proposes with propose --content ..., user approves with approve --id X. Only then does the write land, and only if the 2000-char cap still holds. Direct remember --ring 0 without an approved proposal is rejected. This is proposal+approval, not auto-write.
 
-Storage is SQLite at `.agent/rings.db` with table `memories(id, ring INTEGER, content TEXT, tags TEXT, created_at, updated_at, access_count, salience REAL)`. FTS5 on content for keyword search. If `sqlite-vec` is available use it for vector search, otherwise keyword + recency + salience ranking is enough. No server, no API key required.
+Session lifecycle: on session start run snapshot and inject it. On session end summarize ring3 into ring2, run dream.py on idle or cron for decay, dedupe, promotion candidates, and contradiction flags. Every write auto-exports .agent/memory/ringN.md and git-commits, so markdown is the diffable truth and SQLite is the index. Sync with git push/pull.
 
-Scripts:
-- `scripts/ring.py remember --ring 1 --content "..." --tags "pref"` to save
-- `scripts/ring.py recall --query "..." --ring 1 --limit 3` to search
-- `scripts/ring.py promote --id <id> --to 1` to move upward
-- `scripts/ring.py snapshot` to dump ring0+ring1 summary for prompt injection
+If the DB or scripts are missing, fall back to MEMORY/RINGS.md with the same four sections so memory stays human-readable. If sqlite-vec is absent, keyword + salience + recency ranking is enough; do not add dependencies to get vectors.
 
-If DB is missing, create it. If script fails, fall back to `MEMORY/RINGS.md` files with same ring sections so memory stays human-readable.
-
-MemFS equivalent: every write auto-exports to `.agent/memory/ringN.md` and git-commits. DB is the index, markdown is the diffable truth. Sync to cloud with `git push`, restore with pull then reimport. Run `scripts/dream.py` on idle or cron for sleeptime consolidation: decay of old ring2, dedupe, access-based promotion to ring1, then export and commit. True LLM contradiction checks happen there when you wire your agent in, heuristics run without it.
-
-On session end or compaction, summarize ring3 into one ring2 entry, update access_count and salience, decay ring2 older than 30 days unless pinned.
+Commands live in scripts/ring.py: remember, recall, promote, demote, propose, approve, status, snapshot, export. Consolidation lives in scripts/dream.py. Hook wiring lives in references/hooks.md.
