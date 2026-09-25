@@ -7,3 +7,5 @@ Session start: run `python scripts/ring.py snapshot` and inject the output befor
 Session end or idle: run `python scripts/dream.py`, then `git push`. A 10-minute idle cron is enough. Dream handles decay of old ring2, dedupe, promotion of hot ring2 to ring1, demotion of cold ring1 to ring2, and prints overlap flags for you to resolve.
 
 Compaction: before compacting, summarize ring3 into one ring2 entry with `remember --ring 2`, so working state survives the squeeze.
+
+Easy-use commands (OpenCode): `/remember <text>`, `/recall <query>`, `/rings`. They just call this skill with sensible defaults, so the user never types python directly.
