@@ -5,6 +5,8 @@ description: Lifetime context with protection-ring tiers (ring0 kernel to ring3 
 
 Lifetime context in four rings. Lower number means more privileged, more stable, harder to change. Think x86 protection rings.
 
+Important limit: this file alone does nothing automatically. A skill only loads when the agent decides to read it. True lifetime behavior needs hooks: session start injects snapshot, session end or idle runs dream.py. Without hooks this degrades to on-demand memory. See references/hooks.md for per-platform wiring (OpenCode plugins, Claude Code hooks, Codex hooks beta, OpenChamber via OpenCode).
+
 ring0 kernel: who the agent is, hard constraints, safety rules. Always injected whole. Cap 2000 chars. Writes only via propose then user approve, never silently. This cap is why ring0 stays trustworthy: everything in it is read on every turn, so it must stay small and certain.
 
 ring1 long-term: user preferences, project facts, durable decisions. SQLite + FTS5, vector if sqlite-vec exists. Retrieved top-k per turn. Survives across sessions until demoted.
