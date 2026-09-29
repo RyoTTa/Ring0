@@ -106,3 +106,15 @@ The original `python3 scripts/dream.py` command is an alias for `ring.py dream`.
 Original DBs are upgraded additively on first open. Old proposal IDs, memory IDs and
 FTS data are retained. FTS5 is used when available; otherwise new stores use keyword
 matching without installing extra packages. Vector search is not implemented.
+
+## Automatic project memory
+
+`python3 scripts/install.py --project PATH --auto` installs the OpenCode V2 lifecycle
+plugin for one project. Add `--force` when upgrading. This cannot be combined with
+`--global`. See [hooks.md](hooks.md) for the configuration and event flow.
+
+`python3 scripts/automatic.py --root PATH status` reports the conversation archive
+and pending summarization. `sync` backfills project-local OpenCode sessions through
+the authenticated CLI. Other bridge actions consume JSON on stdin and are intended
+for the plugin. Raw records and checkpoints live in `.agent/history.db`; curated
+memory exports do not include this separate archive.

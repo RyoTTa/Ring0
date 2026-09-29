@@ -64,8 +64,11 @@ def pinned(tags):
 
 
 class Store:
-    def __init__(self, root=None):
-        self.root, self.path = paths(root)
+    def __init__(self, root=None, database=None):
+        if database is None:
+            self.root, self.path = paths(root)
+        else:
+            self.root, self.path = Path(root).resolve(), Path(database).resolve()
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.c = sqlite3.connect(self.path, timeout=15)
         self.c.row_factory = sqlite3.Row
@@ -134,7 +137,7 @@ class Store:
         self.event(cur.lastrowid, 'remember', f'ring{ring}')
         return {'id': cur.lastrowid, 'ring': ring, 'content': content, 'existing': False}
 
-    def recall(self, query, ring=1, limit=3):
+    def recall(self, query, ring=1, limit=3, track=True):
         query = text(query)
         tokens = list(dict.fromkeys(re.findall(r'\w+', query.casefold())))
         if not tokens:
@@ -158,7 +161,7 @@ class Store:
             -pair[1]['updated_at'], -pair[1]['id']))
         rows = [row for _, row in candidates[:limit]]
         now = int(time.time())
-        for row in rows:
+        for row in rows if track else []:
             self.c.execute('UPDATE memories SET access_count=access_count+1, last_access=? WHERE id=?',
                            (now, row['id']))
         return rows

@@ -95,13 +95,21 @@ ring0. Old content remains archived after an approved replacement/removal.
 
 ## Session continuity
 
+For project-local automatic memory in OpenCode V2, run the bundled
+`scripts/install.py --project "<project>" --auto` (add `--force` for an upgrade).
+Read [references/hooks.md](references/hooks.md) when setting it up or troubleshooting.
+The local plugin collects this project's sessions, injects relevant memory before
+model calls, and summarizes completed turns. Raw API records live in `history.db`;
+curated ring memory stays in `rings.db`. Never enable it globally or mix projects.
+Use `automatic.py --root "<project>" status` to verify actual collection before
+claiming it is active. With `summarize: false`, collection and recall remain automatic.
+
 When asked to wrap up, save one useful summary with `remember "..." --ring 2`, archive
 completed scratch entries with `forget ID`, then run `dream`. The maintenance command
 does not invent summaries or remove arbitrary scratch work.
 
-A skill runs **on demand**; installing it does not create automatic session hooks.
-For integration, read [references/hooks.md](references/hooks.md). Do not claim
-automatic per-turn injection unless a host hook has actually been configured.
+An installation without `--auto` runs **on demand**. Do not claim automatic per-turn
+injection unless the project-local plugin has actually been loaded by the host.
 
 ## Storage and troubleshooting
 

@@ -1,0 +1,6 @@
+{
+  "name": "ring-memory-project",
+  "private": true,
+  "type": "module",
+  "main": "index.js"
+}
