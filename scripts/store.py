@@ -10,17 +10,24 @@ import time
 
 RING0_CAP = 2000
 DAY = 86400
+KINDS = ('decision', 'preference', 'fact', 'lesson', 'task', '')
+STATUSES = ('active', 'superseded', 'disputed', 'archived')
+STATE_KEYS = ('goal', 'decisions', 'in_progress', 'blocked', 'next')
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS memories(
  id INTEGER PRIMARY KEY, ring INTEGER, content TEXT,
  tags TEXT DEFAULT '', created_at INTEGER, updated_at INTEGER,
- access_count INTEGER DEFAULT 0, salience REAL DEFAULT 1.0);
+ access_count INTEGER DEFAULT 0, salience REAL DEFAULT 1.0,
+ kind TEXT DEFAULT '', target TEXT DEFAULT '', source TEXT DEFAULT '',
+ status TEXT DEFAULT 'active', valid_from INTEGER, superseded_by INTEGER);
 CREATE TABLE IF NOT EXISTS proposals(
  id INTEGER PRIMARY KEY, content TEXT, tags TEXT DEFAULT '',
  status TEXT DEFAULT 'pending', created_at INTEGER);
 CREATE TABLE IF NOT EXISTS events(
  id INTEGER PRIMARY KEY, memory_id INTEGER, action TEXT,
  detail TEXT, created_at INTEGER);
+CREATE TABLE IF NOT EXISTS project_state(
+ key TEXT PRIMARY KEY, value TEXT DEFAULT '', updated_at INTEGER);
 """
 FTS = """
 CREATE VIRTUAL TABLE IF NOT EXISTS mem_fts USING fts5(content, content='memories', content_rowid='id');
@@ -77,13 +84,28 @@ class Store:
         self.c.execute('BEGIN IMMEDIATE')
         for table, columns in {
             'memories': {'archived_at': 'INTEGER', 'last_access': 'INTEGER',
-                         'last_decay': 'INTEGER'},
+                         'last_decay': 'INTEGER', 'kind': "TEXT DEFAULT ''",
+                         'target': "TEXT DEFAULT ''", 'source': "TEXT DEFAULT ''",
+                         'status': "TEXT DEFAULT 'active'", 'valid_from': 'INTEGER',
+                         'superseded_by': 'INTEGER'},
             'proposals': {'action': "TEXT DEFAULT 'add'", 'target_id': 'INTEGER'},
         }.items():
             existing = {r['name'] for r in self.c.execute(f'PRAGMA table_info({table})')}
             for name, definition in columns.items():
                 if name not in existing:
                     self.c.execute(f'ALTER TABLE {table} ADD COLUMN {name} {definition}')
+        self.c.execute(
+            'UPDATE memories SET status=? WHERE status IS NULL OR status=?', ('active', ''))
+        self.c.execute(
+            'UPDATE memories SET kind=? WHERE kind IS NULL', ('',))
+        self.c.execute(
+            'UPDATE memories SET target=? WHERE target IS NULL', ('',))
+        self.c.execute(
+            'UPDATE memories SET source=? WHERE source IS NULL', ('',))
+        self.c.execute(
+            'UPDATE memories SET valid_from=created_at WHERE valid_from IS NULL')
+        self.c.execute(
+            "UPDATE memories SET status='archived' WHERE archived_at IS NOT NULL AND status='active'")
         self.c.commit()
         existed = self.c.execute("SELECT 1 FROM sqlite_master WHERE name='mem_fts'").fetchone()
         try:
@@ -99,6 +121,83 @@ class Store:
 
     def close(self):
         self.c.close()
+
+    def excluded_sessions(self):
+        path = self.root / '.opencode/ring-memory.json'
+        values = json.loads(path.read_text()).get('excludedSessions', []) if path.exists() else []
+        if not isinstance(values, list) or not all(isinstance(v, str) for v in values):
+            raise ValueError('excludedSessions must be an array of session IDs.')
+        return set(values)
+
+    def eligible(self, row):
+        if row['ring'] == 0:
+            return True
+        tags = set(re.split(r'[\s,]+', row['tags']))
+        return 'eval' not in tags and not any('session:' + sid in tags for sid in self.excluded_sessions())
+
+    def supersede(self, old_id, new_id, reason):
+        old, new = self.get(old_id), self.get(new_id)
+        if old_id == new_id or old['ring'] == 0 or new['ring'] == 0:
+            raise ValueError('Supersession requires two distinct non-kernel memories.')
+        reason = text(reason)
+        now = int(time.time())
+        self.c.execute(
+            'UPDATE memories SET ring=?, updated_at=?, archived_at=?, status=?, superseded_by=?, valid_from=? WHERE id=?',
+            (old['ring'], now, now, 'superseded', new_id, old.get('valid_from') or old['created_at'], old_id))
+        self.event(old_id, 'superseded', json.dumps({'by': new_id, 'reason': reason}, ensure_ascii=False))
+        self.c.execute(
+            'UPDATE memories SET valid_from=? WHERE id=? AND (valid_from IS NULL OR valid_from<?)',
+            (now, new_id, now))
+        return {'id': old_id, 'superseded_by': new_id}
+
+    def dispute(self, memory_id, reason=''):
+        row = self.get(memory_id)
+        if row['ring'] == 0:
+            raise ValueError('ring0 disputes use propose, not dispute.')
+        now = int(time.time())
+        self.c.execute(
+            'UPDATE memories SET status=?, updated_at=? WHERE id=?', ('disputed', now, memory_id))
+        self.event(memory_id, 'disputed', reason)
+        return {'id': memory_id, 'status': 'disputed'}
+
+    def confirm(self, memory_id, kind=None, target=None, source=None):
+        row = self.get(memory_id)
+        updates, args = [], []
+        if kind is not None:
+            if kind not in KINDS or kind == '':
+                raise ValueError(f"kind must be one of {', '.join(k for k in KINDS if k)}.")
+            updates.append('kind=?')
+            args.append(kind)
+        if target is not None:
+            updates.append('target=?')
+            args.append(target.strip())
+        if source is not None:
+            updates.append('source=?')
+            args.append(source.strip())
+        updates.append("status='active'")
+        updates.append('updated_at=?')
+        args.append(int(time.time()))
+        args.append(memory_id)
+        self.c.execute(f"UPDATE memories SET {', '.join(updates)} WHERE id=?", args)
+        self.event(memory_id, 'confirm', json.dumps({'kind': kind, 'target': target, 'source': source},
+                                                    ensure_ascii=False))
+        return self.c.execute('SELECT * FROM memories WHERE id=?', (memory_id,)).fetchone() and dict(
+            self.c.execute('SELECT * FROM memories WHERE id=?', (memory_id,)).fetchone())
+
+    def get_state(self):
+        rows = {r['key']: r['value'] for r in self.c.execute('SELECT key,value FROM project_state')}
+        return {k: rows.get(k, '') for k in STATE_KEYS}
+
+    def set_state(self, key, value):
+        if key not in STATE_KEYS:
+            raise ValueError(f'state key must be one of {", ".join(STATE_KEYS)}.')
+        now = int(time.time())
+        self.c.execute(
+            'INSERT INTO project_state(key,value,updated_at) VALUES(?,?,?) '
+            'ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at',
+            (key, text(value), now))
+        self.event(0, 'state', json.dumps({'key': key}, ensure_ascii=False))
+        return {'key': key, 'value': text(value)}
 
     def event(self, memory_id, action, detail=''):
         self.c.execute('INSERT INTO events(memory_id,action,detail,created_at) VALUES(?,?,?,?)',
@@ -121,10 +220,14 @@ class Store:
         query = 'SELECT * FROM memories' + (' WHERE ' + ' AND '.join(where) if where else '')
         return [dict(r) for r in self.c.execute(query + ' ORDER BY id', args)]
 
-    def add(self, content, ring=1, tags=''):
+    def add(self, content, ring=1, tags='', kind='', target='', source='', valid_from=None):
         content = text(content)
         if ring not in (1, 2, 3):
             raise ValueError('ring0 requires propose, then explicit user approval.')
+        if kind not in KINDS:
+            raise ValueError(f"kind must be one of {', '.join(k for k in KINDS if k)} or empty.")
+        target = (target or '').strip()
+        source = (source or '').strip()
         existing = self.c.execute(
             'SELECT id FROM memories WHERE ring=? AND content=? AND archived_at IS NULL',
             (ring, content)).fetchone()
@@ -132,10 +235,12 @@ class Store:
             return {'id': existing['id'], 'ring': ring, 'content': content, 'existing': True}
         now = int(time.time())
         cur = self.c.execute(
-            'INSERT INTO memories(ring,content,tags,created_at,updated_at) VALUES(?,?,?,?,?)',
-            (ring, content, tags, now, now))
+            'INSERT INTO memories(ring,content,tags,created_at,updated_at,kind,target,source,status,valid_from)'
+            ' VALUES(?,?,?,?,?,?,?,?,?,?)',
+            (ring, content, tags, now, now, kind, target, source, 'active', valid_from or now))
         self.event(cur.lastrowid, 'remember', f'ring{ring}')
-        return {'id': cur.lastrowid, 'ring': ring, 'content': content, 'existing': False}
+        return {'id': cur.lastrowid, 'ring': ring, 'content': content, 'existing': False,
+                'kind': kind, 'target': target}
 
     def recall(self, query, ring=1, limit=3, track=True):
         query = text(query)
@@ -152,7 +257,10 @@ class Store:
                 ranks[row['id']] = row['rank']
         candidates = []
         for row in self.rows(ring):
-            haystack = (row['content'] + ' ' + row['tags']).casefold()
+            if not self.eligible(row):
+                continue
+            haystack = (row['content'] + ' ' + row['tags'] + ' ' + (row.get('kind') or '') + ' '
+                        + (row.get('target') or '')).casefold()
             hits = sum(t in haystack for t in tokens)
             if hits or row['id'] in ranks:
                 candidates.append((hits, row))
@@ -175,8 +283,9 @@ class Store:
         if target not in (1, 2, 3):
             raise ValueError('ring0 requires propose, then explicit user approval.')
         now = int(time.time())
-        self.c.execute('UPDATE memories SET ring=?, updated_at=?, archived_at=? WHERE id=?',
-                       (target, now, now if archive else None, memory_id))
+        status = 'archived' if archive else (row.get('status') if row.get('status') != 'archived' else 'active')
+        self.c.execute('UPDATE memories SET ring=?, updated_at=?, archived_at=?, status=? WHERE id=?',
+                       (target, now, now if archive else None, status, memory_id))
         self.event(memory_id, 'archive' if archive else 'move', f"ring{row['ring']} -> ring{target}")
         return {'id': memory_id, 'ring': target, 'archived': archive}
 
@@ -210,13 +319,14 @@ class Store:
             if size > RING0_CAP:
                 raise ValueError(f'ring0 would use {size}/{RING0_CAP} characters. Shorten or replace an entry.')
             if old:
-                self.c.execute('UPDATE memories SET ring=3, archived_at=?, updated_at=? WHERE id=?',
-                               (now, now, old['id']))
+                self.c.execute('UPDATE memories SET ring=3, archived_at=?, updated_at=?, status=? WHERE id=?',
+                               (now, now, 'archived', old['id']))
                 self.event(old['id'], 'archive', f'approved proposal #{proposal_id}')
             if p['action'] != 'remove':
                 cur = self.c.execute(
-                    'INSERT INTO memories(ring,content,tags,created_at,updated_at) VALUES(0,?,?,?,?)',
-                    (p['content'], p['tags'], now, now))
+                    'INSERT INTO memories(ring,content,tags,created_at,updated_at,kind,target,source,status,valid_from)'
+                    ' VALUES(0,?,?,?,?,?,?,?,?,?)',
+                    (p['content'], p['tags'], now, now, '', '', '', 'active', now))
                 self.event(cur.lastrowid, 'approve', f'proposal #{proposal_id}')
         status = 'approved' if approve else 'rejected'
         self.c.execute('UPDATE proposals SET status=? WHERE id=?', (status, proposal_id))
@@ -227,29 +337,33 @@ class Store:
             'SELECT * FROM proposals' + ('' if include_all else " WHERE status='pending'") + ' ORDER BY id')]
 
     def snapshot(self, query=None):
-        long_term = self.recall(query) if query else sorted(
-            self.rows(1), key=lambda r: (-r['salience'], -r['updated_at'], -r['id']))[:3]
-        recent = sorted(self.rows(2), key=lambda r: (-r['updated_at'], -r['id']))[:5]
-        return {'ring0': self.rows(0), 'ring1': long_term, 'ring2': recent}
+        long_term = self.recall(query, track=False) if query else sorted(
+            [r for r in self.rows(1) if self.eligible(r)], key=lambda r: (-r['salience'], -r['updated_at'], -r['id']))[:3]
+        recent = sorted([r for r in self.rows(2) if self.eligible(r)], key=lambda r: (-r['updated_at'], -r['id']))[:5]
+        return {'ring0': self.rows(0), 'ring1': long_term, 'ring2': recent, 'state': self.get_state()}
 
-    def dream(self, now=None):
+    def dream(self, now=None, limit=50):
         now = int(time.time()) if now is None else now
         actions, seen = [], set()
+        groups = {}
         for row in self.rows():
             if row['ring'] == 0:
                 continue
             key = (row['ring'], row['content'])
             if key in seen:
-                self.move(row['id'], 3, archive=True)
-                actions.append(f"Archived duplicate #{row['id']} (content retained).")
+                if len(actions) < limit:
+                    self.move(row['id'], 3, archive=True)
+                    actions.append(f"Archived duplicate #{row['id']} (content retained).")
                 continue
             seen.add(key)
-            if row['ring'] == 2 and row['access_count'] >= 3:
-                self.move(row['id'], 1)
-                actions.append(f"Promoted #{row['id']} to ring1.")
-            elif not pinned(row['tags']):
+            kind, target = (row.get('kind') or ''), (row.get('target') or '').strip()
+            if kind and target:
+                groups.setdefault((row['ring'], kind, target.casefold()), []).append(row)
+            if not pinned(row['tags']):
                 last_used = max(row['updated_at'], row['last_access'] or 0)
                 if row['ring'] == 1 and last_used < now - 90 * DAY:
+                    if len(actions) >= limit:
+                        continue
                     self.move(row['id'], 2)
                     # Recalls before demotion must not immediately promote it again.
                     self.c.execute('UPDATE memories SET access_count=0, last_decay=? WHERE id=?',
@@ -259,10 +373,23 @@ class Store:
                     baseline = max(row['updated_at'], row['last_decay'] or 0)
                     periods = max(0, (now - baseline) // (30 * DAY))
                     if periods:
+                        if len(actions) >= limit:
+                            continue
                         self.c.execute('UPDATE memories SET salience=salience*?, last_decay=? WHERE id=?',
                                        (0.9 ** periods, baseline + periods * 30 * DAY, row['id']))
                         self.event(row['id'], 'decay', f'{periods} period(s)')
                         actions.append(f"Decayed #{row['id']} by {periods} 30-day period(s).")
+        for (ring, kind, target), members in sorted(groups.items()):
+            if len(actions) >= limit:
+                break
+            contents = {m['content'].strip().casefold() for m in members}
+            if len(members) > 1 and len(contents) > 1:
+                ids = ', '.join(f"#{m['id']}" for m in sorted(members, key=lambda m: m['id']))
+                actions.append(
+                    f"Review {kind} target '{target}' in ring{ring}: {ids} differ — "
+                    f"verify with supersede, dispute, or confirm.")
+        if actions:
+            self.event(0, 'dream', json.dumps({'actions': len(actions)}, ensure_ascii=False))
         return actions
 
     def export(self):
@@ -278,13 +405,26 @@ class Store:
             body = [f'# {name}', '', '<!-- Generated from rings.db; edit through the CLI. -->', '']
             for row in selected:
                 content = row['content'].replace('\n', '\n  ')
-                body.append(f"- [{row['id']}] {content}" + (f" #{row['tags']}" if row['tags'] else ''))
+                meta = []
+                if row.get('kind'):
+                    meta.append(f"kind:{row['kind']}")
+                if row.get('target'):
+                    meta.append(f"target:{row['target']}")
+                if row.get('source'):
+                    meta.append(f"src:{row['source']}")
+                if row.get('status') and row.get('status') != 'active':
+                    meta.append(f"status:{row['status']}")
+                if row.get('superseded_by'):
+                    meta.append(f"by:{row['superseded_by']}")
+                suffix = (' ' + ' '.join(meta)) if meta else ''
+                body.append(f"- [{row['id']}] {content}" + (f" #{row['tags']}" if row['tags'] else '') + suffix)
             path = base / f'{name}.md'
             self._write(path, '\n'.join(body) + '\n')
             files.append(path)
         # Full-fidelity, portable backup; unlike Markdown, includes metadata and proposals.
-        state = {'version': 1, 'memories': rows, 'proposals': self.proposals(True),
-                 'events': [dict(r) for r in self.c.execute('SELECT * FROM events ORDER BY id')]}
+        state = {'version': 2, 'memories': rows, 'proposals': self.proposals(True),
+                 'events': [dict(r) for r in self.c.execute('SELECT * FROM events ORDER BY id')],
+                 'project_state': self.get_state()}
         path = base / 'state.json'
         self._write(path, json.dumps(state, ensure_ascii=False, indent=2) + '\n')
         files.append(path)
@@ -322,14 +462,60 @@ class Store:
         if self.rows(include_archived=True) or self.proposals(True):
             raise ValueError('Restore needs an empty store. Select a new directory with --root.')
         state = json.loads(Path(source).read_text(encoding='utf-8'))
-        if state.get('version') != 1:
+        if state.get('version') not in (1, 2):
             raise ValueError('Unsupported backup version.')
         # All inserts are in the caller transaction; malformed backups roll back together.
         for table in ('memories', 'proposals', 'events'):
             columns = [r['name'] for r in self.c.execute(f'PRAGMA table_info({table})')]
             for row in state[table]:
+                values = []
+                for name in columns:
+                    if name in row:
+                        values.append(row[name])
+                    elif name in ('kind', 'target', 'source'):
+                        values.append('')
+                    elif name == 'status':
+                        values.append('archived' if row.get('archived_at') is not None else 'active')
+                    elif name == 'valid_from':
+                        values.append(row.get('created_at'))
+                    elif name in ('superseded_by', 'archived_at', 'last_access', 'last_decay'):
+                        values.append(None)
+                    elif name in ('access_count',):
+                        values.append(0)
+                    elif name in ('salience',):
+                        values.append(1.0)
+                    else:
+                        raise ValueError(f'Missing {name} in backup.')
                 self.c.execute(f"INSERT INTO {table} ({','.join(columns)}) VALUES ({','.join('?' for _ in columns)})",
-                               [row[name] for name in columns])
+                               values)
+        for key, value in (state.get('project_state') or {}).items():
+            if key in STATE_KEYS and isinstance(value, str) and value.strip():
+                self.c.execute(
+                    'INSERT INTO project_state(key,value,updated_at) VALUES(?,?,?) '
+                    'ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at',
+                    (key, value.strip(), int(time.time())))
+        for row in self.rows(include_archived=True):
+            if (row['ring'] not in (0, 1, 2, 3) or not isinstance(row['content'], str)
+                    or not row['content'].strip() or not isinstance(row['tags'], str)):
+                raise ValueError('Invalid memory in backup.')
+            for field in ('id', 'created_at', 'updated_at', 'access_count',
+                          'archived_at', 'last_access', 'last_decay', 'valid_from', 'superseded_by'):
+                value = row[field]
+                if value is None and field in ('archived_at', 'last_access', 'last_decay', 'valid_from',
+                                               'superseded_by'):
+                    continue
+                if not isinstance(value, int) or value < (1 if field == 'id' else 0):
+                    raise ValueError(f'Invalid {field} in backup memory.')
+            salience = row['salience']
+            if not isinstance(salience, (int, float)) or not math.isfinite(salience) or salience < 0:
+                raise ValueError('Invalid salience in backup memory.')
+            if row.get('kind') not in KINDS:
+                raise ValueError('Invalid kind in backup memory.')
+            if row.get('status') not in STATUSES:
+                raise ValueError('Invalid status in backup memory.')
+            for field in ('target', 'source'):
+                if not isinstance(row.get(field), str):
+                    raise ValueError(f'Invalid {field} in backup memory.')
         for row in self.rows(include_archived=True):
             if (row['ring'] not in (0, 1, 2, 3) or not isinstance(row['content'], str)
                     or not row['content'].strip() or not isinstance(row['tags'], str)):

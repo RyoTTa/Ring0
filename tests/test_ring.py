@@ -193,7 +193,7 @@ class MemoryTests(unittest.TestCase):
         for _ in range(3):
             self.cli('recall', 'cold', '--ring', 2)
         self.cli('dream')
-        self.assertEqual(self.store.get(memory_id)['ring'], 1)
+        self.assertEqual(self.store.get(memory_id)['ring'], 2)
 
     def test_recent_recall_keeps_old_long_term_memory_active(self):
         memory_id = self.save('useful long-term')

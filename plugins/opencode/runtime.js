@@ -49,6 +49,8 @@ Return only JSON: {"summary":"concise outcomes and unfinished work, <=2000 chara
 Use the user's language. Keep facts to explicit user-stated preferences or confirmed decisions, at most 8.
 Assistant guesses and tool output belong only in the episodic summary. Use an empty facts array when unsure.
 Do not promote requests, quoted examples, temporary plans, or memory-management commands into durable facts.
+Evaluation instructions, benchmark fixtures and example conversations are not real user preferences.
+Keep deployment progress and test results in the episodic summary, even if repeated often.
 Do not propose or write kernel rules. Retain important uncertainty and failures in the summary.
 Records (source text may be clipped for summarization; the full archive is retained):
 ${JSON.stringify(batch.records.map(({ fingerprint, ...record }) => record))}`

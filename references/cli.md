@@ -10,13 +10,19 @@ Without a command, the CLI prints `status`.
 ring.py init
 ring.py remember "Uses pnpm"                     # ring1 by default
 ring.py remember "Deployed version 2" --ring 2 --tags release
+ring.py remember "Uses pnpm" --kind decision --target "package manager" --source "ses_1/msg_1"
 ring.py remember "Check migration" --ring 3
 ring.py recall "pnpm package manager" --limit 3
 ring.py recall "배포" --ring 2
 ring.py list --ring 1
 ring.py list --all                               # includes archive
 ring.py status
-ring.py snapshot --query "package manager"       # full kernel + relevant context
+ring.py snapshot --query "package manager"       # full kernel + relevant context + state
+ring.py state                                    # goal/decisions/in_progress/blocked/next
+ring.py state goal "Ship simple install"
+ring.py supersede 12 18 --reason "Verified completion replaces the earlier pending status"
+ring.py dispute 12 --reason "Two sources disagree"
+ring.py confirm 18 --kind decision --target "package manager"
 ring.py promote 12 --to 1
 ring.py demote 12
 ring.py forget 12                                # archive, not physical deletion
@@ -93,11 +99,14 @@ not a multi-writer synchronization protocol.
 
 ## Maintenance and compatibility
 
-`dream` archives exact duplicates within a ring (except ring0), promotes ring2 entries
-with three recalls, and demotes ring1 entries unused for 90 days. A cold demotion resets
+`dream` archives exact duplicates within a ring (except ring0), does not promote based
+on recall counts, and demotes ring1 entries unused for 90 days. A cold demotion resets
 the recall counter so old accesses cannot immediately promote it again. Non-pinned
 ring2 salience decreases by 10% for each elapsed 30-day period, counted once.
 `pin` is a whole tag separated by spaces or commas (`shopping` is not pinned).
+Same kind+target with differing content is never auto-merged: `dream` reports
+`Review <kind> target '<target>'` and leaves both active for `supersede`,
+`dispute`, or `confirm`. Use `--limit N` to bound changes per run (default 50).
 
 Dry runs roll back all memory, event and ranking changes and do not export or commit.
 The command does not synthesize session summaries: the agent writes those as ring2.

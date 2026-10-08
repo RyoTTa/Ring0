@@ -1,5 +1,9 @@
 # Ring0 — Memory in plain language, managed by a skill
 
+> To install with an agent: `https://github.com/RyoTTa/Ring0` — read `AGENTS.md`
+> and install into the current project, then prove the temp-project round-trip
+> (save → recall → supersede → state) works.
+
 A memory skill that helps coding agents carry preferences, project decisions, and
 recent work into future sessions. The core CLI requires only Python 3.9+.
 Automatic mode uses OpenCode V2, with `python3` and `opencode` available on the
@@ -36,10 +40,13 @@ If existing files differ, the installer stops before overwriting them. Review th
 changed files and use `--force` when upgrading. Use `--dry-run` to preview the
 installation paths.
 
-If an agent handles installation, ask it to read this README, install into your
+If an agent handles installation, ask it to read AGENTS.md, install into your
 project, then verify that the `ring-memory.project` plugin is `active` and that
-`status` shows captured records. Initial import and summarization run sequentially
-when there is a large conversation history.
+`status` shows captured records. It must also prove the isolated temp-project
+round-trip from AGENTS.md section 3 (save → recall → supersede → state).
+Initial import and summarization run sequentially
+when there is a large conversation history. Full paths and removal steps are in
+INSTALL.md.
 
 For the on-demand skill, omit `--auto`. To make the on-demand skill available in
 all projects, use `python3 Ring0/scripts/install.py --global`.
@@ -98,14 +105,35 @@ and status checks.
 | --- | --- | --- |
 | **0 — kernel** | Core identity and persistent constraints | Requires user approval; 2,000 characters total; included in full in snapshots |
 | **1 — long-term** | Preferences, project facts, and decisions | Default destination for ordinary memories; retrieved through search |
-| **2 — episodic** | Recent outcomes and session summaries | Promoted after 3 recalls; salience decays in 30-day intervals |
+| **2 — episodic** | Recent outcomes and session summaries | No recall-count promotion; salience decays in 30-day intervals |
 | **3 — scratch** | Temporary working notes | Saved as needed and explicitly archived when the work is done |
 
-`dream` archives duplicates, promotes frequently recalled ring2 entries to ring1,
+`dream` archives duplicates
 and demotes ring1 entries unused for 90 days to ring2. The `pin` tag prevents
 time-based decay and demotion. Repeated runs do not apply decay twice for the same
 period. Ring0 is excluded from automatic consolidation.
 Content is not physically deleted; archived entries are excluded from normal search.
+
+### Evaluation data and outdated memories
+
+Keep evaluation runs in separate project directories and list their session IDs in
+`excludedSessions` in `.opencode/ring-memory.json`. These sessions are excluded from
+capture, extraction, and automatic recall, including previously imported raw records.
+Memories tagged `eval` are excluded from ordinary recall and snapshots.
+Extraction also conservatively rejects user messages containing common evaluation
+or example markers; this heuristic does not replace explicit session exclusion.
+
+Frequent retrieval no longer promotes episodic summaries into long-term facts.
+Promote only verified durable facts explicitly. After checking that a later memory
+actually replaces an earlier decision or status, use:
+
+```bash
+python3 scripts/ring.py supersede 12 18 --reason "Verified completion replaces the earlier pending status"
+```
+
+This archives the older entry and records the replacement ID and reason in history.
+It never replaces ring0 or resolves conflicting preferences automatically. Archived
+memory source excerpts are also excluded from automatic raw-record recall.
 
 ## Use the CLI directly
 

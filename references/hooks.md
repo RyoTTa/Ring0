@@ -85,6 +85,7 @@ existing settings even during `--force` upgrades:
   "enabled": true,
   "summarize": true,
   "backfill": true,
+  "excludedSessions": [],
   "contextChars": 6000
 }
 ```
@@ -95,6 +96,12 @@ project-wide historical import/reconciliation; the live session still checks its
 scope and captures new context. Settings are read during processing, so edits apply
 without changing your main OpenCode configuration. Kernel content is always included
 in full; `contextChars` budgets the remaining recalled context (minimum 2,500).
+
+Put evaluation session IDs in `excludedSessions` before running evaluation prompts.
+Use separate project directories for evaluation stores. Excluded sessions cannot
+capture, extract, receive project context, or contribute to curated/raw recall.
+Previously imported records remain stored for audit; pending counts exclude them.
+Manual memories tagged `eval` are also excluded from normal recall and snapshots.
 
 ## Inspect and recover
 

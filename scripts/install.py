@@ -26,7 +26,7 @@ def main(argv=None):
     else:
         base = (args.project or Path.cwd()).expanduser().resolve() / '.opencode'
     skill = base / 'skills/ring-memory'
-    pairs = [(source / name, skill / name) for name in ('SKILL.md', 'README.md')]
+    pairs = [(source / name, skill / name) for name in ('SKILL.md', 'README.md', 'AGENTS.md', 'INSTALL.md')]
     for directory, pattern in (('scripts', '*.py'), ('references', '*.md')):
         pairs.extend((file, skill / directory / file.name) for file in sorted((source / directory).glob(pattern)))
     # Keep templates in the installed skill too so it can be installed again elsewhere.
@@ -60,7 +60,8 @@ def main(argv=None):
         config = base / 'ring-memory.json'
         if args.auto and not config.exists():
             config.write_text(json.dumps({'enabled': True, 'summarize': True,
-                                          'backfill': True, 'contextChars': 6000}, indent=2) + '\n', encoding='utf-8')
+                                          'backfill': True, 'excludedSessions': [],
+                                          'contextChars': 6000}, indent=2) + '\n', encoding='utf-8')
         print('Ready: /remember <text>, /recall <words>, /rings, /dream')
         print('Automatic capture and recall activate when OpenCode V2 loads this project.' if args.auto
               else 'Or say: "Remember that I prefer short answers."')
