@@ -52,6 +52,8 @@ Agent: 저장된 결정은 pnpm이야. (#1)
 | 호스트 | 방식 | 명령 |
 | --- | --- | --- |
 | OpenCode V2 | 자동 수집 + 회상 (프로젝트별) | `install.py --project 경로 --auto` |
+| Claude Code | 자동 훅 + 회상, 요약은 `claude -p` 경유 (프로젝트별) | `install.py --host claude --project 경로 --auto` |
+| Codex | 자동 훅 + 회상, 요약은 `codex exec` 경유 (프로젝트별) | `install.py --host codex --project 경로 --auto` |
 | OpenCode | 필요할 때 쓰는 스킬 | `install.py --project 경로` 또는 `--global` |
 | Claude Code | 필요할 때 쓰는 스킬 | `install.py --host claude --project 경로` 또는 `--global` |
 | Codex | 필요할 때 쓰는 스킬 | `install.py --host codex --project 경로` 또는 `--global` |

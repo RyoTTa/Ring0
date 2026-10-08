@@ -46,28 +46,40 @@ python3 Ring0/scripts/install.py --project /path/to/project   # this project
 python3 Ring0/scripts/install.py --global                      # every project
 ```
 
-## Claude Code — on-demand
-
-Skill to project `.claude/skills/ring-memory` (commit it to share with the team)
-or personal `~/.claude/skills/ring-memory` (every project on this machine).
-Slash-command templates go to the matching `commands/` directory.
-Talk to the agent in natural language; it runs the bundled CLI with
-`--root` pointed at your project.
+## Claude Code — automatic hooks or on-demand
 
 ```bash
-python3 Ring0/scripts/install.py --host claude --project /path/to/project   # this project
-python3 Ring0/scripts/install.py --host claude --global                      # every project
+python3 Ring0/scripts/install.py --host claude --project /path/to/project --auto   # automatic
+python3 Ring0/scripts/install.py --host claude --project /path/to/project          # on-demand
+python3 Ring0/scripts/install.py --host claude --global                             # on-demand, every project
 ```
 
-## Codex — on-demand
+`--auto` writes SessionStart / UserPromptSubmit / SessionEnd hooks into the
+project's `.claude/settings.json` (existing settings are preserved) and installs
+the skill to `.claude/skills/ring-memory`. Session start injects the project
+snapshot (state + ring0 + relevant memories), each prompt gets matching recalls,
+and session end queues new transcript messages. Summarizing the queue needs a
+model call: run `claude_bridge.py --root /path/to/project digest` with
+`{"session_id": "..."}` on stdin, which uses `claude -p` when available and
+otherwise leaves records pending honestly. Without `--auto`, talk to the agent
+in natural language; it runs the bundled CLI with `--root` at your project.
 
-Skill to project `.codex/skills/ring-memory` or personal `~/.codex/skills/ring-memory`.
-Same deal as Claude Code: natural-language requests, project-scoped storage.
+## Codex — automatic hooks or on-demand
 
 ```bash
-python3 Ring0/scripts/install.py --host codex --project /path/to/project   # this project
-python3 Ring0/scripts/install.py --host codex --global                      # every project
+python3 Ring0/scripts/install.py --host codex --project /path/to/project --auto   # automatic
+python3 Ring0/scripts/install.py --host codex --project /path/to/project          # on-demand
+python3 Ring0/scripts/install.py --host codex --global                            # on-demand, every project
 ```
+
+`--auto` appends SessionStart / SessionEnd / Stop hooks once to the global
+`~/.codex/config.toml` (nothing else is touched; remove that block to uninstall),
+installs the skill into the project, and writes a `.codex/ring-memory.json`
+opt-in marker. The global hook fires for every Codex session but the bridge only
+acts when the session directory sits under an opted-in project, so projects stay
+isolated. Session start injects the project snapshot; session end and stop queue
+new transcript messages (rollout parsing is best-effort). Summarizing uses
+non-interactive `codex exec` when on PATH, otherwise records stay pending.
 
 ## Update, preview, remove
 

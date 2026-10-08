@@ -52,6 +52,8 @@ linked to their replacements with `supersede`, never silently overwritten.
 | Host | Mode | Command |
 | --- | --- | --- |
 | OpenCode V2 | Automatic capture + recall (per project) | `install.py --project PATH --auto` |
+| Claude Code | Automatic hooks + recall, summarize via `claude -p` (per project) | `install.py --host claude --project PATH --auto` |
+| Codex | Automatic hooks + recall, summarize via `codex exec` (per project) | `install.py --host codex --project PATH --auto` |
 | OpenCode | On-demand skill | `install.py --project PATH` or `--global` |
 | Claude Code | On-demand skill | `install.py --host claude --project PATH` or `--global` |
 | Codex | On-demand skill | `install.py --host codex --project PATH` or `--global` |

@@ -329,12 +329,40 @@ class MemoryTests(unittest.TestCase):
         self.assertTrue((project / '.codex/skills/ring-memory/SKILL.md').exists())
         self.assertTrue((project / '.codex/skills/ring-memory/scripts/store.py').exists())
         self.assertFalse((project / '.opencode').exists())
-        # --auto is rejected for non-opencode hosts (parser.error exits 2).
-        for args in (('--host', 'claude', '--project', project, '--auto'),
-                     ('--host', 'claude', '--global', '--auto')):
-            result = subprocess.run([sys.executable, str(ROOT / 'scripts/install.py'), *args],
-                                    cwd=project, text=True, capture_output=True)
-            self.assertNotEqual(result.returncode, 0)
+        # --auto is OpenCode/Claude/Codex project-local.
+        claude_auto = self.project / 'claude auto'
+        claude_auto.mkdir()
+        install('--host', 'claude', '--project', claude_auto, '--auto')
+        settings = json.loads((claude_auto / '.claude/settings.json').read_text())
+        self.assertTrue(any('context-start' in json.dumps(e) for e in settings['hooks']['SessionStart']))
+        self.assertTrue(any('context-prompt' in json.dumps(e) for e in settings['hooks']['UserPromptSubmit']))
+        self.assertTrue(any('capture' in json.dumps(e) for e in settings['hooks']['SessionEnd']))
+        self.assertTrue((claude_auto / '.claude/skills/ring-memory/scripts/claude_bridge.py').exists())
+        codex_home = self.project / 'codex-home'
+        codex_auto = self.project / 'codex auto'
+        codex_auto.mkdir()
+        result = subprocess.run(
+            [sys.executable, str(ROOT / 'scripts/install.py'), '--host', 'codex',
+             '--project', str(codex_auto), '--auto'],
+            cwd=project, text=True, capture_output=True,
+            env={**os.environ, 'HOME': str(codex_home)})
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue((codex_auto / '.codex/ring-memory.json').exists())
+        self.assertTrue((codex_home / '.codex/skills/ring-memory/scripts/codex_bridge.py').exists())
+        config = (codex_home / '.codex/config.toml').read_text()
+        self.assertIn('# ring-memory:', config)
+        self.assertIn('context-start', config)
+        repeat = subprocess.run(
+            [sys.executable, str(ROOT / 'scripts/install.py'), '--host', 'codex',
+             '--project', str(codex_auto), '--auto', '--force'],
+            cwd=project, text=True, capture_output=True,
+            env={**os.environ, 'HOME': str(codex_home)})
+        self.assertEqual(repeat.returncode, 0, repeat.stderr)
+        self.assertEqual((codex_home / '.codex/config.toml').read_text().count('# ring-memory:'), 1)
+        # --auto with --global is still rejected (parser.error exits 2).
+        fired = subprocess.run([sys.executable, str(ROOT / 'scripts/install.py'), '--host', 'codex',
+                                '--global', '--auto'], cwd=project, text=True, capture_output=True)
+        self.assertNotEqual(fired.returncode, 0)
 
 
 if __name__ == '__main__':
