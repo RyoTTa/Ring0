@@ -18,6 +18,13 @@ def skill_pairs(source, skill):
     # Keep templates in the installed skill too so it can be installed again elsewhere.
     for file in sorted((source / 'templates/commands').glob('*.md')):
         pairs.append((file, skill / 'templates/commands' / file.name))
+    # Host adapters travel with the skill; the live plugin copy is added per host below.
+    plugins = source / 'plugins'
+    if plugins.is_dir():
+        for host in sorted(p for p in plugins.iterdir() if p.is_dir()):
+            for file in sorted(host.glob('*')):
+                if file.is_file():
+                    pairs.append((file, skill / 'plugins' / host.name / file.name))
     return pairs
 
 
@@ -85,10 +92,8 @@ def main(argv=None):
         for file in sorted((source / 'templates/commands').glob('*.md')):
             pairs.append((file, base / 'commands' / file.name))
         for file in sorted((source / 'plugins/opencode').glob('*')):
-            if file.is_file():
-                pairs.append((file, skill / 'plugins/opencode' / file.name))
-                if args.auto:
-                    pairs.append((file, base / 'plugins/ring-memory' / file.name))
+            if file.is_file() and args.auto:
+                pairs.append((file, base / 'plugins/ring-memory' / file.name))
     elif args.host == 'claude':
         skill = base / 'skills/ring-memory'
         pairs = skill_pairs(source, skill)
@@ -104,7 +109,7 @@ def main(argv=None):
         codex_marker = base / 'ring-memory.json'
         global_skill = Path.home() / '.codex' / 'skills' / 'ring-memory'
         pairs.extend(skill_pairs(source, global_skill))
-        codex_bridge = global_skill / 'scripts/codex_bridge.py'
+        codex_bridge = global_skill / 'plugins/codex/codex_bridge.py'
         codex_config = Path.home() / '.codex' / 'config.toml'
         print(f'Hooks: {codex_config} (global once, per-project opt-in via {codex_marker})')
     try:
@@ -116,7 +121,7 @@ def main(argv=None):
         settings_path, hook_commands = None, {}
         if args.auto and args.host == 'claude':
             project = base.parent
-            bridge = skill / 'scripts/claude_bridge.py'
+            bridge = skill / 'plugins/claude/claude_bridge.py'
             hook_commands = {
                 'SessionStart': f'python3 "{bridge}" --root "{project}" context-start',
                 'UserPromptSubmit': f'python3 "{bridge}" --root "{project}" context-prompt',

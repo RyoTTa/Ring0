@@ -47,6 +47,16 @@ Agent: The saved decision is pnpm. (#1)
 Nothing is ever deleted, only archived with its history. Outdated decisions are
 linked to their replacements with `supersede`, never silently overwritten.
 
+## Structured memory + project state
+
+Every memory carries a kind (`decision`, `preference`, `fact`, `lesson`, `task`),
+a topic (`target`), its evidence (`source`), and a status (`active`, `superseded`,
+`disputed`, `archived`). Alongside the rings, Ring0 keeps live project state —
+`goal`, `decisions`, `in_progress`, `blocked`, `next` — injected into every new
+session first, so work resumes where it stopped. `dream` never auto-merges
+conflicts: same topic with different content is reported for review, and you
+resolve it explicitly with `supersede`, `dispute`, or `confirm`.
+
 ## Hosts
 
 | Host | Mode | Command |

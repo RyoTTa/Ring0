@@ -337,7 +337,7 @@ class MemoryTests(unittest.TestCase):
         self.assertTrue(any('context-start' in json.dumps(e) for e in settings['hooks']['SessionStart']))
         self.assertTrue(any('context-prompt' in json.dumps(e) for e in settings['hooks']['UserPromptSubmit']))
         self.assertTrue(any('capture' in json.dumps(e) for e in settings['hooks']['SessionEnd']))
-        self.assertTrue((claude_auto / '.claude/skills/ring-memory/scripts/claude_bridge.py').exists())
+        self.assertTrue((claude_auto / '.claude/skills/ring-memory/plugins/claude/claude_bridge.py').exists())
         codex_home = self.project / 'codex-home'
         codex_auto = self.project / 'codex auto'
         codex_auto.mkdir()
@@ -348,7 +348,7 @@ class MemoryTests(unittest.TestCase):
             env={**os.environ, 'HOME': str(codex_home)})
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertTrue((codex_auto / '.codex/ring-memory.json').exists())
-        self.assertTrue((codex_home / '.codex/skills/ring-memory/scripts/codex_bridge.py').exists())
+        self.assertTrue((codex_home / '.codex/skills/ring-memory/plugins/codex/codex_bridge.py').exists())
         config = (codex_home / '.codex/config.toml').read_text()
         self.assertIn('# ring-memory:', config)
         self.assertIn('context-start', config)

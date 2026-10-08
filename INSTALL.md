@@ -59,7 +59,7 @@ project's `.claude/settings.json` (existing settings are preserved) and installs
 the skill to `.claude/skills/ring-memory`. Session start injects the project
 snapshot (state + ring0 + relevant memories), each prompt gets matching recalls,
 and session end queues new transcript messages. Summarizing the queue needs a
-model call: run `claude_bridge.py --root /path/to/project digest` with
+model call: run `plugins/claude/claude_bridge.py --root /path/to/project digest` with
 `{"session_id": "..."}` on stdin, which uses `claude -p` when available and
 otherwise leaves records pending honestly. Without `--auto`, talk to the agent
 in natural language; it runs the bundled CLI with `--root` at your project.

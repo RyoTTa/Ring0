@@ -12,6 +12,7 @@ from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
+sys.path.insert(0, str(ROOT / 'plugins/claude'))
 from automatic import Automatic
 from claude_bridge import queue, snapshot_text, transcript_messages
 
@@ -41,7 +42,7 @@ class ClaudeBridgeTests(unittest.TestCase):
         self.addCleanup(self.archive.close)
 
     def bridge(self, action, payload=None):
-        script = str(ROOT / 'scripts/claude_bridge.py')
+        script = str(ROOT / 'plugins/claude/claude_bridge.py')
         stdin = json.dumps(payload or {}) if payload is not None else '{}'
         result = subprocess.run([sys.executable, script, '--root', str(self.project), action],
                                 input=stdin, text=True, capture_output=True)

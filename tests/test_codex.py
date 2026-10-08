@@ -11,6 +11,8 @@ from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
+sys.path.insert(0, str(ROOT / 'plugins/claude'))
+sys.path.insert(0, str(ROOT / 'plugins/codex'))
 from automatic import Automatic
 from codex_bridge import opted_in, transcript_messages
 
@@ -30,7 +32,7 @@ class CodexBridgeTests(unittest.TestCase):
         (self.project / '.codex' / 'ring-memory.json').write_text('{"enabled": true}')
 
     def bridge(self, action, payload, env=None):
-        script = str(ROOT / 'scripts/codex_bridge.py')
+        script = str(ROOT / 'plugins/codex/codex_bridge.py')
         result = subprocess.run([sys.executable, script, action], input=json.dumps(payload),
                                 text=True, capture_output=True,
                                 env={**os.environ, **(env or {})})

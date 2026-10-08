@@ -47,6 +47,16 @@ Agent: 저장된 결정은 pnpm이야. (#1)
 삭제는 없다. 보관만 하며 이력은 남는다. 낡은 결정은 `supersede`로 대체 관계가
 연결되고, 몰래 덮어쓰지 않는다.
 
+## 구조화된 기억 + 프로젝트 상태
+
+모든 기억에는 종류(`decision`, `preference`, `fact`, `lesson`, `task`), 주제
+(`target`), 근거(`source`), 상태(`active`, `superseded`, `disputed`, `archived`)가
+붙는다. 링과 별개로 살아있는 프로젝트 상태 — `goal`, `decisions`, `in_progress`,
+`blocked`, `next` — 를 유지해서 매 새 세션에 가장 먼저 넣어준다. 그래서 일이
+멈춘 곳에서 이어진다. `dream`은 충돌을 자동 병합하지 않는다. 같은 주제에 내용이
+다르면 검토 대상으로 보고만 하고, `supersede`, `dispute`, `confirm`으로 직접
+판정한다.
+
 ## 호스트
 
 | 호스트 | 방식 | 명령 |
