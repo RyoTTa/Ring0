@@ -311,6 +311,31 @@ class MemoryTests(unittest.TestCase):
         install('--global', env={**os.environ, 'XDG_CONFIG_HOME': str(config)})
         self.assertTrue((config / 'opencode/skills/ring-memory/SKILL.md').exists())
 
+    def test_installer_hosts_claude_and_codex_layout(self):
+        project = self.project / 'host project'
+        project.mkdir()
+        def install(*args, success=True):
+            result = subprocess.run([sys.executable, str(ROOT / 'scripts/install.py'), *map(str, args)],
+                                    cwd=project, text=True, capture_output=True)
+            self.assertEqual(result.returncode, 0 if success else 1, result.stderr)
+            return result
+        install('--host', 'claude', '--project', project, '--dry-run')
+        self.assertFalse((project / '.claude').exists())
+        install('--host', 'claude', '--project', project)
+        self.assertTrue((project / '.claude/skills/ring-memory/SKILL.md').exists())
+        self.assertTrue((project / '.claude/skills/ring-memory/scripts/ring.py').exists())
+        self.assertTrue((project / '.claude/commands/remember.md').exists())
+        install('--host', 'codex', '--project', project)
+        self.assertTrue((project / '.codex/skills/ring-memory/SKILL.md').exists())
+        self.assertTrue((project / '.codex/skills/ring-memory/scripts/store.py').exists())
+        self.assertFalse((project / '.opencode').exists())
+        # --auto is rejected for non-opencode hosts (parser.error exits 2).
+        for args in (('--host', 'claude', '--project', project, '--auto'),
+                     ('--host', 'claude', '--global', '--auto')):
+            result = subprocess.run([sys.executable, str(ROOT / 'scripts/install.py'), *args],
+                                    cwd=project, text=True, capture_output=True)
+            self.assertNotEqual(result.returncode, 0)
+
 
 if __name__ == '__main__':
     unittest.main()

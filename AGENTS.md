@@ -19,8 +19,9 @@ python3 Ring0/scripts/install.py --project /path/to/project --auto
 ```
 
 Without `--auto` for on-demand skill only. `--global` only for on-demand skill.
-Preserve existing settings on `--force` upgrades. See `INSTALL.md` for
-update/remove and other hosts.
+For Claude Code or Codex add `--host claude` / `--host codex` (on-demand only;
+`--auto` is OpenCode-only). Preserve existing settings on `--force` upgrades.
+See `INSTALL.md` for update/remove and other hosts.
 
 ## 3. Verify (must do all three)
 

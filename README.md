@@ -1,205 +1,69 @@
-# Ring0 — Memory in plain language, managed by a skill
+# Ring0 — project memory that survives new sessions
 
-> To install with an agent: `https://github.com/RyoTTa/Ring0` — read `AGENTS.md`
-> and install into the current project, then prove the temp-project round-trip
-> (save → recall → supersede → state) works.
+**🇬🇧 English** · [🇰🇷 한국어](README.ko.md)
 
-A memory skill that helps coding agents carry preferences, project decisions, and
-recent work into future sessions. The core CLI requires only Python 3.9+.
-Automatic mode uses OpenCode V2, with `python3` and `opencode` available on the
-server's PATH. Summaries are generated using a model connected to OpenCode.
-No separate memory server or pip installation is required.
+Your coding agent forgets everything between sessions. Ring0 fixes that: preferences,
+project decisions, and recent work, stored per project and recalled automatically.
+
+## Install
+
+Copy/paste into your agent prompt:
+
+```
+Install the ring-memory skill from https://github.com/RyoTTa/Ring0, refer to the repo's AGENTS.md for instructions.
+```
+
+Or 🔗 check the [installation instructions](INSTALL.md) for OpenCode, Claude Code, and Codex.
+
+## What it does
+
+Say it once, and every future session remembers.
 
 ```text
 You: This project uses pnpm. Remember that.
 Agent: Remembered: this project uses pnpm. (#1)
 
+(next session)
 You: Which package manager did we decide to use?
 Agent: The saved decision is pnpm. (#1)
 ```
 
-## Automatic setup per project — OpenCode V2 / OpenChamber
+## What changes
 
-Replace `/path/to/project` with the **absolute path of the project whose memories
-you want to store**. Tested with OpenCode v2.0.16.
-
-```bash
-git clone https://github.com/RyoTTa/Ring0.git
-python3 Ring0/scripts/install.py --project /path/to/project --auto
-```
-
-Open that project in OpenCode/OpenChamber to start conversation capture,
-summarization, and memory injection. Automation and storage are **isolated per
-installed project**. Check collection status with:
-
-```bash
-python3 /path/to/project/.opencode/skills/ring-memory/scripts/automatic.py --root /path/to/project status
-```
-
-If existing files differ, the installer stops before overwriting them. Review the
-changed files and use `--force` when upgrading. Use `--dry-run` to preview the
-installation paths.
-
-If an agent handles installation, ask it to read AGENTS.md, install into your
-project, then verify that the `ring-memory.project` plugin is `active` and that
-`status` shows captured records. It must also prove the isolated temp-project
-round-trip from AGENTS.md section 3 (save → recall → supersede → state).
-Initial import and summarization run sequentially
-when there is a large conversation history. Full paths and removal steps are in
-INSTALL.md.
-
-For the on-demand skill, omit `--auto`. To make the on-demand skill available in
-all projects, use `python3 Ring0/scripts/install.py --global`.
-For other agents, copy this folder into the host's skills directory as
-`ring-memory`. The skill is named `ring-memory`; the project is named Ring0.
-
-## Usage
-
-Use natural-language requests or OpenCode commands.
-
-| Request | Command |
+| Before | After |
 | --- | --- |
-| “Remember that I prefer short answers.” | `/remember I prefer short answers` |
-| “Find our previous deployment decision.” | `/recall deployment` |
-| “Show my saved memory status.” | `/rings` |
-| “Clean up old memories.” | `/dream` |
-| “Forget that preference.” | The agent finds and archives the entry |
+| Every session starts from zero. You re-explain the stack, the conventions, the decisions you already made. | The agent opens with your project's goal, current decisions, and next actions already loaded. |
+| "Did we decide pnpm or npm?" gets a guess. | It gets the saved decision, with its ID and history. |
 
-Ordinary save requests go into ring1. You do not need to choose a ring number.
-Search uses keywords and prefixes, including Korean text. Synonym matching and
-cross-language semantic search are not supported; the agent searches with relevant
-keywords.
+## The rings
 
-## Project-local automatic memory (OpenCode V2)
+4 tiers, newest sessions keep working notes, durable facts live long. Full text in [SKILL.md](SKILL.md).
 
-To remember this project's conversations, replies, and tool execution records
-without asking for each one to be saved:
+1. **ring0 — kernel.** Core identity and constraints. Needs your approval; capped at 2,000 chars; always loaded in full.
+2. **ring1 — long-term.** Preferences, facts, decisions. The default save destination, found by keyword search.
+3. **ring2 — episodic.** Session summaries and recent outcomes. Fades over 30-day periods unless pinned.
+4. **ring3 — scratch.** Temporary notes, archived when the work is done.
 
-```bash
-python3 Ring0/scripts/install.py --project /path/to/project --auto
-```
+Nothing is ever deleted, only archived with its history. Outdated decisions are
+linked to their replacements with `supersede`, never silently overwritten.
 
-Add `--force` to upgrade an existing installation. The plugin runs automatically
-when the project is opened in OpenCode/OpenChamber. It does not affect other
-projects, and automatic mode cannot be combined with `--global`.
+## Hosts
 
-1. Import existing project sessions through all pages, then capture new conversations and tool results.
-2. Before each model call, add all of ring0 plus relevant memories and historical records to the context.
-3. After a response completes, summarize new records into ring2 and save facts supported by user statements into ring1.
-4. Resume from saved processing checkpoints after a restart, without storing duplicate records.
-
-Summarization uses the session's model and incurs additional model calls. To keep
-capture, retrieval, and injection without those extra calls, set `summarize` to
-`false` in the project's `.opencode/ring-memory.json`. Set `enabled: false` to
-stop automatic processing.
-
-Captured records are stored in `.agent/history.db`; curated memories are stored
-in `.agent/rings.db`. Only sessions within the **installed project's path** are
-processed. Nested folders with their own Git repositories are treated as separate
-projects. See the [automatic integration guide](references/hooks.md) for settings
-and status checks.
-
-## The four rings
-
-| Ring | Purpose | Rules |
+| Host | Mode | Command |
 | --- | --- | --- |
-| **0 — kernel** | Core identity and persistent constraints | Requires user approval; 2,000 characters total; included in full in snapshots |
-| **1 — long-term** | Preferences, project facts, and decisions | Default destination for ordinary memories; retrieved through search |
-| **2 — episodic** | Recent outcomes and session summaries | No recall-count promotion; salience decays in 30-day intervals |
-| **3 — scratch** | Temporary working notes | Saved as needed and explicitly archived when the work is done |
+| OpenCode V2 | Automatic capture + recall (per project) | `install.py --project PATH --auto` |
+| OpenCode | On-demand skill | `install.py --project PATH` or `--global` |
+| Claude Code | On-demand skill | `install.py --host claude --project PATH` or `--global` |
+| Codex | On-demand skill | `install.py --host codex --project PATH` or `--global` |
 
-`dream` archives duplicates
-and demotes ring1 entries unused for 90 days to ring2. The `pin` tag prevents
-time-based decay and demotion. Repeated runs do not apply decay twice for the same
-period. Ring0 is excluded from automatic consolidation.
-Content is not physically deleted; archived entries are excluded from normal search.
+Only Python 3.9+ is required. No pip packages, no memory server. Storage is
+SQLite inside your project (`.agent/`), isolated per project.
 
-### Evaluation data and outdated memories
+## Tune it
 
-Keep evaluation runs in separate project directories and list their session IDs in
-`excludedSessions` in `.opencode/ring-memory.json`. These sessions are excluded from
-capture, extraction, and automatic recall, including previously imported raw records.
-Memories tagged `eval` are excluded from ordinary recall and snapshots.
-Extraction also conservatively rejects user messages containing common evaluation
-or example markers; this heuristic does not replace explicit session exclusion.
+Fork, edit `SKILL.md` and the ring policy, then reinstall with `--force`.
+`AGENTS.md` has the agent install checklist, `INSTALL.md` the per-host details.
 
-Frequent retrieval no longer promotes episodic summaries into long-term facts.
-Promote only verified durable facts explicitly. After checking that a later memory
-actually replaces an earlier decision or status, use:
+## License
 
-```bash
-python3 scripts/ring.py supersede 12 18 --reason "Verified completion replaces the earlier pending status"
-```
-
-This archives the older entry and records the replacement ID and reason in history.
-It never replaces ring0 or resolves conflicting preferences automatically. Archived
-memory source excerpts are also excluded from automatic raw-record recall.
-
-## Use the CLI directly
-
-You can run the CLI from the repository without installing the skill.
-
-```bash
-python3 scripts/ring.py remember "I prefer short answers" --tags preference
-python3 scripts/ring.py recall "answers"
-python3 scripts/ring.py list
-python3 scripts/ring.py snapshot --query "answers"
-python3 scripts/ring.py dream --dry-run
-```
-
-Use `--root /path/to/project` to select the storage location. If omitted, Ring0
-looks for the nearest existing memory store or Git root, falling back to the
-current directory. The installed script's location does not determine where
-memories are stored.
-
-To change ring0:
-
-```bash
-python3 scripts/ring.py propose "The agent's name is Ring"
-python3 scripts/ring.py proposals
-# Only after the user approves that proposal:
-python3 scripts/ring.py approve 1
-```
-
-The legacy `--content`, `--query`, and `--id` syntax and `scripts/dream.py` remain
-supported. Existing SQLite databases are upgraded on first use by adding the
-required columns without deleting data.
-
-## Storage and backups
-
-```text
-<project>/.agent/
-├── rings.db                  # Source of truth: memories, proposals, and event history
-└── memory/
-    ├── ring0.md … ring3.md    # All active memories, with no entry-count limit
-    ├── archive.md            # Archived content
-    └── state.json            # Restorable backup, including metadata, proposals, and history
-```
-
-Changes to memory content trigger an export. **SQLite is the source of truth**;
-Markdown files are for reading. Run `export` to include the latest recall counts
-in your backup.
-
-```bash
-python3 scripts/ring.py export --commit
-python3 scripts/ring.py --root /path/to/empty-project restore /path/to/state.json
-```
-
-Git commits happen only when you pass `--commit`. Memory export files are explicitly
-added even if ignored, and unrelated staged files are excluded from the commit.
-The database itself is not added to Git. Restore works only with an empty store.
-Concurrent database merging across devices is not supported.
-
-An installation without `--auto` runs on demand. Automatic mode is specific to
-OpenCode V2; other hosts require integration with their own event and context hooks.
-
-## Development
-
-```bash
-python3 -m unittest discover -s tests -v
-node --test tests/test_automatic.mjs
-```
-
-Tests use temporary directories inside the repository and remove them on completion.
-See the [CLI reference](references/cli.md) for the full command list, storage paths,
-and restore instructions.
+MIT. Star ⭐ if a future session ever surprised you by remembering.
